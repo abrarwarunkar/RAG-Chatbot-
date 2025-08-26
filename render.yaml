@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: rag-backend
+    env: python
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://rag-frontend.onrender.com
+
+  - type: web
+    name: rag-frontend
+    env: node
+    buildCommand: "cd frontend && npm install && npm run build"
+    startCommand: "cd frontend && npx serve -s build -l $PORT"
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://rag-backend.onrender.com
