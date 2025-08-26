@@ -106,26 +106,18 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 - Word Documents (.docx)
 - Text Files (.txt)
 
-## Docker Deployment
+## Local Development Only
 
-### Using Docker Compose
-```bash
-docker-compose up --build
-```
+This project is configured for local development:
 
-### Individual Containers
-**Backend:**
 ```bash
+# Backend
 cd backend
-docker build -t rag-backend .
-docker run -p 8000:8000 --env-file .env rag-backend
-```
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
 
-**Frontend:**
-```bash
+# Frontend  
 cd frontend
-docker build -t rag-frontend .
-docker run -p 3000:80 rag-frontend
+npm start
 ```
 
 ## Troubleshooting
