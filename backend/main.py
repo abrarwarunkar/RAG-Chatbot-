@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -32,13 +32,9 @@ app.add_middleware(
 doc_processor = DocumentProcessor()
 vector_store = VectorStore()
 
-# Load existing vector store if available
+# Vector store path
 vector_store_path = "./data/vector_store"
-try:
-    vector_store.load_index(vector_store_path)
-    print(f"Loaded existing vector store with {vector_store.index.ntotal} documents")
-except:
-    print("Starting with empty vector store")
+print("Starting with empty vector store")
 
 llm_service = LLMService()
 
@@ -67,16 +63,59 @@ async def get_documents_status():
         "documents": [
             {
                 "filename": doc["metadata"]["filename"],
-                "chunk_id": doc["metadata"]["chunk_id"]
+                "chunk_id": doc["metadata"]["chunk_id"],
+                "content_preview": doc["content"][:100]
             }
-            for doc in vector_store.documents[:10]  # Show first 10
+            for doc in vector_store.documents
         ]
     }
 
+@app.post("/documents/force-clear")
+async def force_clear_all():
+    """Force clear everything and restart fresh"""
+    global vector_store
+    vector_store = VectorStore()  # Create completely new instance
+    
+    # Remove any saved files
+    import shutil
+    if os.path.exists("./data"):
+        shutil.rmtree("./data")
+    
+    return {"message": "Force cleared all documents and created new vector store"}
+
+@app.post("/documents/clear")
+async def clear_documents():
+    """Clear all documents from vector store"""
+    try:
+        vector_store.clear()
+        # Remove saved vector store files
+        import shutil
+        if os.path.exists(f"{vector_store_path}.faiss"):
+            os.remove(f"{vector_store_path}.faiss")
+        if os.path.exists(f"{vector_store_path}.pkl"):
+            os.remove(f"{vector_store_path}.pkl")
+        
+        return {"message": "All documents cleared successfully"}
+    except Exception as e:
+        raise HTTPException(500, f"Error clearing documents: {str(e)}")
+
 @app.post("/upload")
-async def upload_documents(files: List[UploadFile] = File(...)):
+async def upload_documents(files: List[UploadFile] = File(...), clear_existing: bool = Form(True)):
     """Upload and process documents for RAG"""
     try:
+        # Clear existing documents if requested (default behavior)
+        if clear_existing:
+            print(f"Clearing existing documents. Current count: {vector_store.index.ntotal}")
+            vector_store.clear()
+            # Also remove saved files
+            if os.path.exists(f"{vector_store_path}.faiss"):
+                os.remove(f"{vector_store_path}.faiss")
+                print("Removed vector_store.faiss")
+            if os.path.exists(f"{vector_store_path}.pkl"):
+                os.remove(f"{vector_store_path}.pkl")
+                print("Removed vector_store.pkl")
+            print(f"After clearing: {vector_store.index.ntotal} documents")
+        
         processed_docs = []
         
         for file in files:
@@ -93,6 +132,7 @@ async def upload_documents(files: List[UploadFile] = File(...)):
             # Store in vector database
             doc_id = str(uuid.uuid4())
             await vector_store.add_documents(chunks, doc_id, file.filename)
+            print(f"Added {len(chunks)} chunks from {file.filename}")
             
             processed_docs.append({
                 "filename": file.filename,
@@ -128,6 +168,16 @@ async def chat_endpoint(request: ChatRequest):
         
         # Search relevant documents
         relevant_docs = await vector_store.search(request.message, top_k=5)
+        
+        # Debug: Print what documents are found
+        print(f"\n=== DEBUG: Found {len(relevant_docs)} relevant documents ===")
+        for i, doc in enumerate(relevant_docs):
+            print(f"Doc {i+1}: {doc['metadata']['filename']} - Chunk {doc['metadata']['chunk_id']}")
+            print(f"Content preview: {doc['content'][:100]}...")
+        print(f"Total documents in vector store: {vector_store.index.ntotal}")
+        if len(vector_store.documents) > 0:
+            print(f"First document filename: {vector_store.documents[0]['metadata']['filename']}")
+        print("=== END DEBUG ===")
         
         # Generate streaming response
         async def generate_response():

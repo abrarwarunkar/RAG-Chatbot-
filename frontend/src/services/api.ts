@@ -8,11 +8,14 @@ const api = axios.create({
   timeout: 30000,
 });
 
-export const uploadDocuments = async (files: FileList): Promise<{ documents: UploadedDocument[] }> => {
+export const uploadDocuments = async (files: FileList, clearExisting: boolean = true): Promise<{ documents: UploadedDocument[] }> => {
   const formData = new FormData();
   Array.from(files).forEach(file => {
     formData.append('files', file);
   });
+  
+  // Add clear_existing parameter
+  formData.append('clear_existing', clearExisting.toString());
 
   const response = await api.post('/upload', formData, {
     headers: {
@@ -21,6 +24,10 @@ export const uploadDocuments = async (files: FileList): Promise<{ documents: Upl
   });
 
   return response.data;
+};
+
+export const clearDocuments = async (): Promise<void> => {
+  await api.post('/documents/clear');
 };
 
 export const streamChat = async (
