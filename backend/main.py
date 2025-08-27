@@ -198,7 +198,7 @@ async def force_reset_everything(request: Request):
         
         return {"message": "Complete reset successful - all data cleared from Supabase"}
     except Exception as e:
-        raise HTTPException(500, f"Error during reset: {str(e)}"
+        raise HTTPException(500, f"Error during reset: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
