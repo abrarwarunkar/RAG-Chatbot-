@@ -15,7 +15,7 @@ import shutil
 load_dotenv()
 
 from document_processor import DocumentProcessor
-from vector_store import VectorStore
+from vector_store_supabase import VectorStoreSupabase
 from llm_service import LLMService
 
 app = FastAPI(title="RAG Chatbot API", version="1.0.0")
@@ -44,15 +44,13 @@ def root():
 async def startup_event():
     """Initializes the services on application startup and attaches them to the app state."""
     app.state.doc_processor = DocumentProcessor()
-    app.state.vector_store = VectorStore()
+    app.state.vector_store = VectorStoreSupabase()
     app.state.llm_service = LLMService()
     
-    # Always start fresh - remove any existing data
-    if os.path.exists("./data"):
-        shutil.rmtree("./data")
-        print("Removed existing data directory")
+    # Initialize Supabase connection
+    await app.state.vector_store.init()
     
-    print("Services initialized with fresh vector store")
+    print("Services initialized with Supabase vector store")
 
 # Vector store path
 vector_store_path = "./data/vector_store"
@@ -67,23 +65,14 @@ class ChatRequest(BaseModel):
 @app.post("/upload")
 async def upload_documents(request: Request, files: List[UploadFile] = File(...), clear_existing: bool = Form(True)):
     """Upload and process documents for RAG"""
-    vector_store: VectorStore = request.app.state.vector_store
+    vector_store: VectorStoreSupabase = request.app.state.vector_store
     doc_processor: DocumentProcessor = request.app.state.doc_processor
     
     try:
         if clear_existing:
-            print(f"Clearing existing documents. Current count: {vector_store.index.ntotal}")
-            
-            # Complete reset - recreate vector store from scratch
-            request.app.state.vector_store = VectorStore()
-            vector_store = request.app.state.vector_store
-            
-            # Remove any data files
-            if os.path.exists("./data"):
-                shutil.rmtree("./data")
-            
-            print(f"After clearing: {vector_store.index.ntotal} documents")
-            print(f"Documents list length: {len(vector_store.documents)}")
+            print("Clearing existing documents from Supabase")
+            await vector_store.clear()
+            print("Cleared all existing documents")
         
         processed_docs = []
         
@@ -97,8 +86,6 @@ async def upload_documents(request: Request, files: List[UploadFile] = File(...)
             doc_id = str(uuid.uuid4())
             await vector_store.add_documents(chunks, doc_id, file.filename)
             print(f"Added {len(chunks)} chunks from {file.filename}")
-            print(f"Total documents now: {vector_store.index.ntotal}")
-            print(f"First document: {vector_store.documents[0]['metadata']['filename'] if vector_store.documents else 'None'}")
             
             processed_docs.append({
                 "filename": file.filename,
@@ -106,12 +93,7 @@ async def upload_documents(request: Request, files: List[UploadFile] = File(...)
                 "chunks": len(chunks)
             })
         
-        # Save the new vector store to disk
-        try:
-            vector_store.save_index(vector_store_path)
-            print(f"Saved new vector store with {vector_store.index.ntotal} documents")
-        except Exception as e:
-            print(f"Warning: Could not save vector store: {e}")
+        # Supabase handles persistence automatically
         
         return {
             "message": f"Successfully processed {len(files)} documents",
@@ -126,7 +108,7 @@ async def upload_documents(request: Request, files: List[UploadFile] = File(...)
 @app.post("/chat")
 async def chat_endpoint(chat_request: ChatRequest, request: Request):
     """Chat with streaming response"""
-    vector_store: VectorStore = request.app.state.vector_store
+    vector_store: VectorStoreSupabase = request.app.state.vector_store
     llm_service: LLMService = request.app.state.llm_service
 
     try:
@@ -189,7 +171,7 @@ async def chat_endpoint(chat_request: ChatRequest, request: Request):
 @app.get("/documents/status")
 async def get_documents_status(request: Request):
     """Get detailed status of uploaded documents"""
-    vector_store: VectorStore = request.app.state.vector_store
+    vector_store: VectorStoreSupabase = request.app.state.vector_store
     return {
         "total_documents": vector_store.index.ntotal,
         "document_count": len(vector_store.documents),
@@ -207,22 +189,16 @@ async def get_documents_status(request: Request):
 async def force_reset_everything(request: Request):
     """Completely reset everything - nuclear option"""
     try:
-        # Recreate all services from scratch
-        request.app.state.vector_store = VectorStore()
-        request.app.state.doc_processor = DocumentProcessor()
-        request.app.state.llm_service = LLMService()
-        
-        # Remove any data directory
-        if os.path.exists("./data"):
-            shutil.rmtree("./data")
+        vector_store: VectorStoreSupabase = request.app.state.vector_store
+        await vector_store.clear()
         
         # Clear sessions
         global sessions
         sessions = {}
         
-        return {"message": "Complete reset successful - all services recreated"}
+        return {"message": "Complete reset successful - all data cleared from Supabase"}
     except Exception as e:
-        raise HTTPException(500, f"Error during reset: {str(e)}")
+        raise HTTPException(500, f"Error during reset: {str(e)}"
 
 if __name__ == "__main__":
     import uvicorn
