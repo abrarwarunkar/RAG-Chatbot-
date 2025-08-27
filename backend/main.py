@@ -23,6 +23,7 @@ app = FastAPI(title="RAG Chatbot API", version="1.0.0")
 # ✅ Safe CORS settings (only localhost + your Vercel frontend)
 origins = [
     "http://localhost:3000",  # local development
+    "http://localhost:3001",  # local development alternate port
     "https://rag-chatbot-client-seven.vercel.app",  # deployed frontend
 ]
 
@@ -120,11 +121,13 @@ async def chat_endpoint(chat_request: ChatRequest, request: Request):
         relevant_docs = await vector_store.search(chat_request.message, top_k=5)
         
         # Debug logging
+        total_chunks = await vector_store.get_total_chunks()
         print(f"\n=== CHAT DEBUG ===")
-        print(f"Total docs in vector store: {vector_store.index.ntotal}")
+        print(f"Total chunks in vector store: {total_chunks}")
         print(f"Found {len(relevant_docs)} relevant docs")
         for i, doc in enumerate(relevant_docs):
             print(f"Doc {i+1}: {doc['metadata']['filename']} - {doc['content'][:50]}...")
+            print(f"Similarity: {doc.get('similarity', 'N/A')}")
         print("=== END DEBUG ===")
         
         async def generate_response():
