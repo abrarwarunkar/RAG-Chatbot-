@@ -12,10 +12,12 @@ class VectorStore:
         self.index = faiss.IndexFlatIP(self.dimension)  # Inner product for cosine similarity
         self.documents = []  # Store document metadata
         self.embeddings = []
+        print(f"Initialized new VectorStore with dimension {self.dimension}")
         
     async def add_documents(self, chunks: List[Dict], doc_id: str, filename: str):
         """Add document chunks to vector store"""
         texts = [chunk["content"] for chunk in chunks]
+        print(f"Adding {len(texts)} chunks from {filename}")
         
         # Generate embeddings
         embeddings = self.model.encode(texts, convert_to_tensor=False)
@@ -25,6 +27,7 @@ class VectorStore:
         
         # Add to FAISS index
         self.index.add(embeddings.astype('float32'))
+        print(f"Added embeddings to FAISS index. Total documents: {self.index.ntotal}")
         
         # Store document metadata
         for i, chunk in enumerate(chunks):
@@ -39,10 +42,14 @@ class VectorStore:
             })
         
         self.embeddings.extend(embeddings)
+        print(f"Total documents in metadata: {len(self.documents)}")
     
     async def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Search for similar documents"""
+        print(f"Searching for: '{query}' in {self.index.ntotal} documents")
+        
         if self.index.ntotal == 0:
+            print("No documents in vector store")
             return []
         
         # Generate query embedding
@@ -55,44 +62,81 @@ class VectorStore:
         # Return results with scores
         results = []
         for score, idx in zip(scores[0], indices[0]):
-            if idx < len(self.documents):
+            if idx < len(self.documents) and idx >= 0:
                 doc = self.documents[idx].copy()
                 doc["score"] = float(score)
                 results.append(doc)
+                print(f"Found document: {doc['metadata']['filename']} (chunk {doc['metadata']['chunk_id']}) - Score: {score:.4f}")
         
         # Filter by minimum similarity threshold
-        results = [doc for doc in results if doc["score"] > 0.1]
+        filtered_results = [doc for doc in results if doc["score"] > 0.1]
+        print(f"After filtering (score > 0.1): {len(filtered_results)} results")
         
-        return results
+        return filtered_results
     
     def save_index(self, filepath: str):
         """Save vector store to disk"""
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
-        # Save FAISS index
-        faiss.write_index(self.index, f"{filepath}.faiss")
-        
-        # Save documents and metadata
-        with open(f"{filepath}.pkl", "wb") as f:
-            pickle.dump({
-                "documents": self.documents,
-                "embeddings": self.embeddings
-            }, f)
+        try:
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            
+            # Save FAISS index
+            faiss.write_index(self.index, f"{filepath}.faiss")
+            print(f"Saved FAISS index to {filepath}.faiss")
+            
+            # Save documents and metadata
+            with open(f"{filepath}.pkl", "wb") as f:
+                pickle.dump({
+                    "documents": self.documents,
+                    "embeddings": self.embeddings
+                }, f)
+            print(f"Saved metadata to {filepath}.pkl")
+            
+        except Exception as e:
+            print(f"Error saving vector store: {e}")
+            raise e
     
     def load_index(self, filepath: str):
         """Load vector store from disk"""
-        if os.path.exists(f"{filepath}.faiss") and os.path.exists(f"{filepath}.pkl"):
-            # Load FAISS index
-            self.index = faiss.read_index(f"{filepath}.faiss")
-            
-            # Load documents and metadata
-            with open(f"{filepath}.pkl", "rb") as f:
-                data = pickle.load(f)
-                self.documents = data["documents"]
-                self.embeddings = data["embeddings"]
+        try:
+            if os.path.exists(f"{filepath}.faiss") and os.path.exists(f"{filepath}.pkl"):
+                # Load FAISS index
+                self.index = faiss.read_index(f"{filepath}.faiss")
+                print(f"Loaded FAISS index from {filepath}.faiss with {self.index.ntotal} documents")
+                
+                # Load documents and metadata
+                with open(f"{filepath}.pkl", "rb") as f:
+                    data = pickle.load(f)
+                    self.documents = data["documents"]
+                    self.embeddings = data["embeddings"]
+                print(f"Loaded {len(self.documents)} document metadata entries")
+                
+            else:
+                print(f"Vector store files not found at {filepath}")
+                
+        except Exception as e:
+            print(f"Error loading vector store: {e}")
+            # Reset to empty state on load error
+            self.index = faiss.IndexFlatIP(self.dimension)
+            self.documents = []
+            self.embeddings = []
+            raise e
     
     def clear(self):
         """Clear all documents and reset index"""
+        print(f"Clearing vector store. Current size: {self.index.ntotal}")
+        
+        # Create completely new FAISS index
         self.index = faiss.IndexFlatIP(self.dimension)
         self.documents = []
         self.embeddings = []
+        
+        print(f"Cleared vector store. New index has {self.index.ntotal} documents")
+    
+    def get_status(self):
+        """Get current status of vector store"""
+        return {
+            "total_documents": self.index.ntotal,
+            "metadata_count": len(self.documents),
+            "embeddings_count": len(self.embeddings),
+            "dimension": self.dimension
+        }

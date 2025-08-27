@@ -19,6 +19,9 @@ async def upload_and_process(files):
     if not files:
         return "No files uploaded"
     
+    # Clear the vector store before processing new files
+    vector_store.clear()
+    
     processed_docs = []
     for file in files:
         try:
