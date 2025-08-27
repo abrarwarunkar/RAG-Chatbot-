@@ -20,18 +20,24 @@ from llm_service import LLMService
 
 app = FastAPI(title="RAG Chatbot API", version="1.0.0")
 
-# CORS middleware
+# ✅ Safe CORS settings (only localhost + your Vercel frontend)
+origins = [
+    "http://localhost:3000",  # local development
+    "https://rag-chatbot-client-seven.vercel.app",  # deployed frontend
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://rag-chatbot-client-seven.vercel.app",
-        "https://*.vercel.app"
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Health Check Route ---
+@app.get("/")
+def root():
+    return {"status": "Backend is running 🚀"}
 
 # --- State Management ---
 @app.on_event("startup")
@@ -61,7 +67,6 @@ class ChatRequest(BaseModel):
 @app.post("/upload")
 async def upload_documents(request: Request, files: List[UploadFile] = File(...), clear_existing: bool = Form(True)):
     """Upload and process documents for RAG"""
-    # Access the single, shared vector_store instance from the application state
     vector_store: VectorStore = request.app.state.vector_store
     doc_processor: DocumentProcessor = request.app.state.doc_processor
     
