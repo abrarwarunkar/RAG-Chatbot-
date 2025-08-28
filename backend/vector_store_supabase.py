@@ -94,24 +94,27 @@ class VectorStoreSupabase:
         """Clear all documents and chunks with memory optimization."""
         client = self._get_client()
         
-        # Clear in smaller batches to avoid memory spikes
-        batch_size = 100
-        
-        # Clear chunks first (child records)
-        while True:
-            resp = client.table("chunks").delete().limit(batch_size).neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        try:
+            # Clear chunks first (child records) - using a simpler approach without limit
+            resp = client.table("chunks").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             if getattr(resp, "error", None):
                 raise RuntimeError(f"Failed to clear chunks: {resp.error}")
-            if not resp.data or len(resp.data) < batch_size:
-                break
-        
-        # Clear documents
-        while True:
-            resp = client.table("documents").delete().limit(batch_size).neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            
+            # Clear documents
+            resp = client.table("documents").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             if getattr(resp, "error", None):
                 raise RuntimeError(f"Failed to clear documents: {resp.error}")
-            if not resp.data or len(resp.data) < batch_size:
-                break
+        except Exception as e:
+            logger.error(f"Error clearing documents and chunks: {str(e)}")
+            # Try alternative approach if the first one fails
+            try:
+                # Alternative approach without chaining methods
+                resp = client.table("chunks").delete().execute()
+                resp = client.table("documents").delete().execute()
+                logger.info("Used alternative approach to clear tables")
+            except Exception as e2:
+                logger.error(f"Alternative clearing also failed: {str(e2)}")
+                raise
                 
         logger.info("🧹 Cleared all documents from Supabase")
         self._log_memory_usage("After clearing documents")
