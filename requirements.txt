@@ -10,6 +10,6 @@ numpy==1.24.3
 pydantic==2.5.0
 huggingface_hub==0.20.3
 asyncpg==0.29.0
-supabase==2.3.0
+supabase
 httpx==0.23.3
 # Remove postgrest-py 
