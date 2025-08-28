@@ -1,4 +1,5 @@
 import axios from 'axios';
+import axiosRetry from 'axios-retry';
 import { UploadedDocument } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://rag-chatbot-backend-w3ef.onrender.com';
@@ -6,6 +7,20 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://rag-chatbot-backe
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
+});
+
+// Configure axios-retry
+axiosRetry(api, {
+  retries: 3, // Number of retry attempts
+  retryDelay: (retryCount) => {
+    return retryCount * 2000; // Exponential backoff: 2s, 4s, 6s
+  },
+  retryCondition: (error) => {
+    // Retry on network errors and 5xx responses
+    // Ensure we always return a boolean value
+    return !!(axiosRetry.isNetworkError(error) ||
+           (error.response && error.response.status >= 500));
+  }
 });
 
 export const uploadDocuments = async (files: FileList, clearExisting: boolean = true): Promise<{ documents: UploadedDocument[] }> => {
@@ -17,10 +32,12 @@ export const uploadDocuments = async (files: FileList, clearExisting: boolean = 
   // Add clear_existing parameter
   formData.append('clear_existing', clearExisting.toString());
 
+  // Use a longer timeout for uploads (2 minutes instead of 30 seconds)
   const response = await api.post('/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+    timeout: 120000, // 2 minutes
   });
 
   return response.data;

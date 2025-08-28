@@ -11,30 +11,70 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete }) => 
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedDocument[]>([]);
+  // State for tracking upload progress and errors
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleFiles = useCallback(async (files: FileList) => {
     if (files.length === 0) return;
 
+    // Reset states
+    setUploadError(null);
+    setUploadProgress(0);
+
     // Validate file types
     const validTypes = ['.pdf', '.docx', '.txt'];
-    const invalidFiles = Array.from(files).filter(file => 
+    const invalidFiles = Array.from(files).filter(file =>
       !validTypes.some(type => file.name.toLowerCase().endsWith(type))
     );
 
     if (invalidFiles.length > 0) {
-      alert(`Invalid file types: ${invalidFiles.map(f => f.name).join(', ')}\nSupported: PDF, DOCX, TXT`);
+      setUploadError(`Invalid file types: ${invalidFiles.map(f => f.name).join(', ')}\nSupported: PDF, DOCX, TXT`);
+      return;
+    }
+
+    // Validate file sizes
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const oversizedFiles = Array.from(files).filter(file => file.size > maxSize);
+    
+    if (oversizedFiles.length > 0) {
+      setUploadError(`Files too large: ${oversizedFiles.map(f => f.name).join(', ')}\nMaximum size: 10MB per file`);
       return;
     }
 
     setIsUploading(true);
+    
+    // Start progress simulation
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => {
+        // Slowly increase to 90% (real completion will jump to 100%)
+        if (prev < 90) {
+          return prev + (Math.random() * 5);
+        }
+        return prev;
+      });
+    }, 500);
+    
     try {
       const result = await uploadDocuments(files);
       setUploadedFiles(prev => [...prev, ...result.documents]);
       onUploadComplete(result.documents);
-    } catch (error) {
+      setUploadProgress(100);
+    } catch (error: any) {
       console.error('Upload failed:', error);
-      alert('Upload failed. Please try again.');
+      
+      // Provide more specific error messages
+      if (error.code === 'ECONNABORTED') {
+        setUploadError('Upload timed out. The server is taking too long to process your documents. Please try with smaller files or fewer documents.');
+      } else if (error.response && error.response.status === 413) {
+        setUploadError('Files too large. Please try uploading smaller documents or fewer at once.');
+      } else if (error.message && error.message.includes('Network Error')) {
+        setUploadError('Network error. Please check your internet connection and try again.');
+      } else {
+        setUploadError(`Upload failed: ${error.message || 'Unknown error'}. Please try again.`);
+      }
     } finally {
+      clearInterval(progressInterval);
       setIsUploading(false);
     }
   }, [onUploadComplete]);
@@ -94,11 +134,17 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete }) => 
                   Processing Documents...
                 </h3>
                 <p className="text-gray-600">
-                  Please wait while we analyze your files
+                  Please wait while we analyze your files. This may take a few minutes for large documents.
                 </p>
                 <div className="mt-4 w-48 mx-auto bg-gray-200 rounded-full h-2">
-                  <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full animate-pulse" style={{ width: '70%' }} />
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full"
+                    style={{ width: `${Math.min(uploadProgress, 100)}%` }}
+                  />
                 </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {uploadProgress < 100 ? 'Processing...' : 'Complete!'}
+                </p>
               </div>
             </div>
           ) : (
@@ -156,6 +202,34 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ onUploadComplete }) => 
           )}
         </div>
       </div>
+
+      {/* Error Message */}
+      {uploadError && (
+        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700">
+          <div className="flex items-start">
+            <div className="flex-shrink-0 mt-0.5">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Upload Error</h3>
+              <div className="mt-1 text-sm text-red-700 whitespace-pre-line">
+                {uploadError}
+              </div>
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => setUploadError(null)}
+                  className="inline-flex items-center px-3 py-1.5 border border-red-300 shadow-sm text-xs font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Uploaded Files */}
       {uploadedFiles.length > 0 && (

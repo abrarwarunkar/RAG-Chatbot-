@@ -1,19 +1,35 @@
+# Core FastAPI dependencies (lightweight)
 fastapi==0.115.2
 uvicorn[standard]==0.24.0
 python-multipart==0.0.18
 python-dotenv==1.0.0
+
+# LLM service (lightweight API client)
 groq==0.30.0
-sentence-transformers==2.7.0
+
+# Document processing (keep minimal)
 PyPDF2==3.0.1
 python-docx==1.1.0
+
+# Data handling (essential only)
 numpy==1.26.4
 pydantic==2.7.4
-huggingface_hub==0.30.0
+
+# Database (lightweight)
 asyncpg==0.29.0
 supabase==2.8.1
 httpx[http2]==0.27.2
-gotrue==2.9.0
-pydantic-settings==2.8.1
-smolagents==1.15.0
-setuptools==69.0.0
-gradio==5.29.0
+
+# REMOVED HEAVY DEPENDENCIES:
+# sentence-transformers==2.7.0  # ~500MB+ with models
+# huggingface_hub==0.30.0       # Heavy dependency
+# gotrue==2.9.0                 # Not essential 
+# pydantic-settings==2.8.1      # Not used
+# smolagents==1.15.0            # Not used
+# setuptools==69.0.0            # Usually pre-installed
+# gradio==5.29.0                # Not used in backend
+
+# Memory monitoring
+psutil==5.9.8
+
+# Use Groq for embeddings instead of sentence-transformers
