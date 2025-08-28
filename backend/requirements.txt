@@ -1,15 +1,15 @@
-fastapi
-uvicorn[standard]
-python-multipart
-python-dotenv
-groq
-sentence-transformers
-PyPDF2
-python-docx
-numpy
-pydantic
-huggingface_hub
-asyncpg
-supabase
-httpx
-postgrest-py
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+python-dotenv==1.0.0
+groq==0.9.0
+sentence-transformers==2.7.0
+PyPDF2==3.0.1
+python-docx==1.1.0
+numpy==1.24.3
+pydantic==2.5.0
+huggingface_hub==0.20.3
+asyncpg==0.29.0
+supabase==2.3.0  # Use a newer version that supports Pydantic v2
+httpx==0.23.3    # Compatible version for both groq and supabase
+postgrest-py==0.11.0  # Version that supports Pydantic v2
